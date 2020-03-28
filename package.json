@@ -1,0 +1,30 @@
+{
+  "name": "tele-bot-mach-zehn",
+  "version": "1.0.0",
+  "description": "Pumpen in quarantäne",
+  "main": "index.js",
+  "scripts": {
+    "test": "node index.js",
+    "release": "node index.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Tomsen1410/tele-bot-mach-zehn.git"
+  },
+  "keywords": [
+    "telegram",
+    "bot",
+    "sport",
+    "social",
+    "fitness"
+  ],
+  "author": "Tomsen1410",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Tomsen1410/tele-bot-mach-zehn/issues"
+  },
+  "homepage": "https://github.com/Tomsen1410/tele-bot-mach-zehn#readme",
+  "dependencies": {
+    "mongodb": "~2.2.0"
+  }
+}
