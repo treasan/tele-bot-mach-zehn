@@ -118,8 +118,8 @@ function processCommand(chatId, userId, userName, commandArray, messageId) {
                 // console.log(chat);
 
                 let chatChanged = false;
-                sendMessage(chatId, "rgfreg");
-                if(commandArray[0] !== "/start" && !chat.users.hasOwnProperty(userId)) {
+                // sendMessage(chatId, "rgfreg");
+                if(commandArray[0] !== "/start" && commandArray[0] !== "/help" && !chat.users.hasOwnProperty(userId)) {
                     if(!chat.users.hasOwnProperty(userId)) {
                         sendMessage(chatId, "Du bist dem flexn noch nicht beigetreten! Beginne mit /start", "Markdown");
                     }
