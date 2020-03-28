@@ -250,11 +250,17 @@ function processCommand(chatId, userId, userName, commandArray, messageId) {
                             }
                             else if(commandArray.length === 3) {
                                 let exercise = commandArray[1];
-                                let alias = commandArray[2];
-                                chat.exerciseAliases[alias] = exercise;
-                                chatChanged = true;
-    
-                                sendMessage(chatId, "Ihr könnt jetzt auch *" + alias + "* für *" + exercise + "* verwenden!");
+
+                                if(!chat.exerciseReps.hasOwnProperty(exercise)) {
+                                    sendMessage(chatId, "Ich kenne die Übung " + exercise + " nicht. Verwende zuerst /exercise, um die Übung zu registrieren.", messageId);
+                                }
+                                else {
+                                    let alias = commandArray[2];
+                                    chat.exerciseAliases[alias] = exercise;
+                                    chatChanged = true;
+                                    sendMessage(chatId, "Ihr könnt jetzt auch *" + alias + "* für *" + exercise + "* verwenden!");
+                                }
+
                             }
                             else {
                                 sendMessage(chatId, "Du musst eine Übung und einen Alias angeben!", messageId);
