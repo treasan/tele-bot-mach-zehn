@@ -1,7 +1,7 @@
 const https = require("https");
 var mongoClient = require("mongodb").MongoClient;
 
-const token = "1075045753:AAFnxEfR7Xilqt1QbeVeDMeU_5WW5OXyHFw";
+const token = "1069385444:AAHeTuUtegFcLpzXdKj0iThesuPdq_IuqQ0";
 const dbUrl = "mongodb://192.168.0.125:27017/test";
 const UPDATE_POLL_RATE = 3500; // in ms
 
