@@ -12,7 +12,7 @@ class ChatData {
         this.id = chatId;
         this.users = {};                    // {userId1: UserData, userId2: UserData, ...}
         this.exerciseReps = {};             // {pushups: 50, situps: 20, ...}
-        this.exerciseAliases = {};          // {alias: exercise} 
+        this.exerciseAliases = {};          // {alias: exercise}
         this.defaultExercise = "";
     }
 }
@@ -127,10 +127,6 @@ function processCommand(chatId, userId, userName, commandArray, message) {
                     }
                 }
                 else {
-                    chat.users[userId].id = userId;
-                    if(message.from.first_name != null) chat.users[userId].name = message.from.first_name;
-                    if(message.from.username != null) chat.users[userId].username = message.from.username;
-
                     switch(commandArray[0]) {
                         // start
                         // ==============================================================                        
