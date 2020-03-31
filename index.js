@@ -1,9 +1,43 @@
+// import * as config from "./config"
+const config = require("./config");
+
 const https = require("https");
 var mongoClient = require("mongodb").MongoClient;
 
-const token = "1069385444:AAHeTuUtegFcLpzXdKj0iThesuPdq_IuqQ0";
-const dbUrl = "mongodb://192.168.0.125:27017/armordb";
-const UPDATE_POLL_RATE = 3500; // in ms
+// const MODE = "DEBUG";
+
+// const token = MODE === "DEBUG" ? "1075045753:AAFnxEfR7Xilqt1QbeVeDMeU_5WW5OXyHFw" : "1069385444:AAHeTuUtegFcLpzXdKj0iThesuPdq_IuqQ0";
+// const DB_URL =  "mongodb://192.168.0.125:27017/" + (MODE === "DEBUG" ? "test" : "armordb");
+// const UPDATE_POLL_RATE = 3500; // in ms
+
+class TaskEntity {
+    constructor(id, name, aliases) {
+        this.id = id;
+        this.name = name;
+        this.aliases = aliases;
+    }
+}
+
+class ChatEntity {
+    constructor(id, userIds, taskIds, taskReps, ) {
+        this.id = id;
+        this.userIds = userIds;
+        this.taskIds = taskIds; // task mongo id array
+        this.taskReps = taskReps; // <taskId, reps>
+    }
+}
+
+class UserEntity {
+    constructor(id, chatIds){
+        this.id = id;
+        this.surname = "";
+        this.lastname = "";
+        this.username = "";
+        this.chatIds = chatIds;
+        this.history = [];
+        // this.
+    }
+}
 
 
 
@@ -21,22 +55,46 @@ class UserData {
     constructor(id, name, username) {
         this.id = id;
         this.name = name;
+        this.lastName = "";
         this.username = username;
         this.totalReps = {};        // {pushups: 150, situps: 60, ...};
         this.remainders = {};       // {pushups: 10, situps: 5, ...}
+        this.history = [];          //
+        this.unrecognizedUpdates = {
+
+        };
     }
 }
 
 
+
+//
+// Application-scoped variable needed to mark updates as processed on the telegram servers
 var lastUpdateId = null;
-// var chats = new Map(); // Map<chatId, ChatData>
 
 
 var responseStr = "";
 var pollCount = 0;
 
+/**
+ * Message poll loop
+ */
 setInterval(() => {
     console.log("\n ["+ ++pollCount + "] INTERVAL");
+
+    (async function f() {
+        let db = await mongoClient.connect(config.DB_URL)
+        console.log("--- DB ---");
+        console.log(db);
+
+        let collection = await db.collection("chats");
+        console.log("--- COLLECTION ---");
+        console.log(collection);
+
+        let chats = await collection.findOne({id: 42849274});
+        console.log("--- CHATS ---");
+        console.log(chats);
+    })();
 
     let requestOptions;
     if(lastUpdateId == null) {
@@ -54,35 +112,8 @@ setInterval(() => {
         .on("data", chunk => responseStr += chunk)
         .on("end", () => {
             let json = JSON.parse(responseStr);
-
-            // console.log("JSON");
-            // console.log(json);
-
             if(json.hasOwnProperty("ok") && json.ok && json.hasOwnProperty("result")) {
-                let result = json.result;
-                result.forEach(update => {
-                    if(lastUpdateId == null || (update.update_id > lastUpdateId)) {
-                        lastUpdateId = update.update_id;
-                        if(update.hasOwnProperty("message") && update.message.hasOwnProperty("entities")) {
-                            let offsets = [];
-                            update.message.entities.forEach(entity => {
-                                if(entity.type === "bot_command") {
-                                    offsets.push(entity.offset);
-                                }
-                            });
-                            console.log(result);
-                            console.log("Commands: ");
-                            if(offsets.length > 0) {
-                                for(let i = 0; i < offsets.length; ++i) {
-                                    let commandStr = update.message.text.slice(offsets[i], (i < offsets.length-1) ? offsets[i+1] : update.message.text.length);
-                                    let commandArr = commandStr.split(/\ +/);
-                                    console.log(commandArr);
-                                    processCommand(update.message.chat.id, update.message.from.id, update.message.from.first_name, commandArr, update.message);
-                                }
-                            }
-                        }
-                    }
-                });
+                json.result.forEach(update => processUpdate(update));
             }
             else {
 
@@ -96,386 +127,811 @@ setInterval(() => {
     });
 
     req.end();
-}, UPDATE_POLL_RATE);
+}, config.UPDATE_POLL_RATE);
 
-function processCommand(chatId, userId, userName, commandArray, message) {
-    // var response = new TextForm();
-    var chat = null;
 
-    mongoClient.connect(dbUrl, (err, db) => {
-        db.collection("chats", (err2, collection) => {
-            collection.findOne({id: chatId}, (err3, chatObj) => {
-                let chatChanged = false;
-                chat = chatObj;
-                if(chat == null) {
-                    chat = new ChatData(chatId);
-                    chatChanged = true;
-                    // collection.insertOne(chat, (err, result) => {console.log(err);});
+//
+// Called for every update within one poll intervall
+// ================================================================
+function processUpdate(update, changes) {
+    if(lastUpdateId == null || (update.update_id > lastUpdateId)) {
+        lastUpdateId = update.update_id;
+
+        if(update.hasOwnProperty("message") && update.message.hasOwnProperty("entities")) {
+            try {
+                console.log("JOOOOOOOOOOOOOOOOOOOO");
+                console.log(update.message);
+                console.log(update.message.chat);
+            } catch(e) {}
+            let offsets = [];
+            update.message.entities.forEach(entity => {
+                if(entity.type === "bot_command") {
+                    offsets.push(entity.offset);
                 }
+            });
+            console.log(result);
+            console.log("Commands: ");
+            if(offsets.length > 0) {
+                for(let i = 0; i < offsets.length; ++i) {
+                    let commandStr = update.message.text.slice(offsets[i], (i < offsets.length-1) ? offsets[i+1] : update.message.text.length);
+                    let commandArr = commandStr.split(/\ +/);
+                    console.log(commandArr);
+                    processCommand(update.message.chat.id, update.message.from.id, update.message.from.first_name, commandArr, update.message);
+                }
+            }
+        }
+        else if(update.hasOwnProperty("inline_query")) {
+            update.inline_query;
 
-                // Temporary only to update db
-                if(chat.users.hasOwnProperty(userId)) {
-                    chat.users[userId].id = userId;
-                    if(message.from.first_name != null) chat.users[userId].name = message.from.first_name;
-                    if(message.from.username != null) chat.users[userId].username = message.from.username;
+        }
+    }
+}
+
+async function processMessage(message, changes) {
+    let offsets = [];
+    message.entities.forEach(entity => {
+        if(entity.type === "bot_command") {
+            offsets.push(entity.offset);
+        }
+    });
+
+    let commands = [];
+    if(offsets.length > 0) {
+        for(let i = 0; i < offsets.length; ++i) {
+            let commstr = message.text.slice(offsets[i], (i < offsets.length-1) ? offsets[i+1] : update.message.text.length);
+            commands.push(commstr.split(/\ +/));
+        }
+    }
+
+
+    let chatId = message.chat.id;
+
+    try {
+        await mongoClient.connect(config.DB_URL);
+    } catch (e) {
+        console.error(e);
+    }
+    finally {
+        await mongoClient.close();
+    }
+
+    mongoClient.connect(DB_URL)
+    .then((err0, db) => db.collection("chats"))
+    .then((err1, collection) => collection.findOne({id: chatId}))
+    .then((err2, chatObject) => {
+        var chatData = chatObject;
+        var chatUpdated = false;
+
+        if(chatData == null) {
+            chatData = new ChatData(message.chat.id);
+            chatUpdated = true;
+        }
+
+        commands.forEach(c => processChatCommand(c[0], c.slice(1), message, chatData, chatUpdated));
+
+        if(chatUpdated)
+            collection.update({id: chatId}, chatData).then(() => db.close());
+        else
+            db.close();
+    });
+}
+
+function processCommand(command, params, message, changes, chatUpdated) {
+    let userId = messageData.message.from.id;
+    let chat = messageData.chat;
+
+
+    // Temporary only to update db
+    if(chat.users.hasOwnProperty(userId)) {
+        chat.users[userId].id = userId;
+        if(message.from.first_name != null) chat.users[userId].name = message.from.first_name;
+        if(message.from.username != null) chat.users[userId].username = message.from.username;
+        chatChanged = true;
+    }
+
+    if(commandArray[0] !== "/start" && commandArray[0] !== "/help" && !chat.users.hasOwnProperty(userId)) {
+        if(!chat.users.hasOwnProperty(userId)) {
+            sendMessage(chatId, "Du bist dem flexn noch nicht beigetreten! Beginne mit /start", "Markdown");
+        }
+    }
+    else {
+        switch(commandArray[0]) {
+            // start
+            // ==============================================================                        
+            case "/start": {
+                if(!chat.users.hasOwnProperty(userId)) {
+                    chat.users[userId] = new UserData(userId, message.from.first_name, message.from.username);
+                    sendMessage(chatId, "*Willkommen beim flexn, " + userName + "!*\nHilfe findest du unter /help");
                     chatChanged = true;
                 }
+                
+                break;
+            }
 
-                if(commandArray[0] !== "/start" && commandArray[0] !== "/help" && !chat.users.hasOwnProperty(userId)) {
-                    if(!chat.users.hasOwnProperty(userId)) {
-                        sendMessage(chatId, "Du bist dem flexn noch nicht beigetreten! Beginne mit /start", "Markdown");
+
+            // machma
+            // ==============================================================
+            case "/machma": {
+                let response = new TextForm();
+
+                if(commandArray.length >= 3) {
+                    let alias = commandArray[2];
+                    let exercise = chat.exerciseAliases.hasOwnProperty(alias) ? chat.exerciseAliases[alias] : alias;
+
+                    if(!chat.exerciseReps.hasOwnProperty(exercise)) {
+                        response.newLine("Unbekannte Übung", "*");
+                        response.newLine("Verwende /exercise, um eine neue Übung hinzuzufügen");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else {
+                        let reps = parseInt(commandArray[1]);
+                        if(isNaN(reps)) {
+                            sendMessage(chatId, "Gib a echte Zahl ein zefix!", message.message_id);
+                        }
+                        else if(reps <= 0){
+                            sendMessage(chatId, "Gib a postive Zahl ein zefix!", message.message_id);
+                        }
+                        else {
+                            let remainder = getRemaining(chat, userId, exercise);
+                            if(remainder > 0) {
+                                response.newLine("Machma erstmal deine `" + remainder + "` `" + exercise + "`");
+                                sendMessage(chatId, response.render(), message.message_id);
+                            }
+                            else {
+                                // update total reps for this exercise in chat
+                                if(!chat.exerciseReps.hasOwnProperty(exercise))
+                                    chat.exerciseReps[exercise] = 0;
+
+                                chat.exerciseReps[exercise] += reps;
+
+                                // update total reps for this exercise of this user
+                                if(!chat.users[userId].totalReps.hasOwnProperty(exercise))
+                                    chat.users[userId].totalReps[exercise] = 0;
+
+                                chat.users[userId].totalReps[exercise] += reps;
+
+                                // update exercise remainder for all remaining users in chat
+                                for(let uId in chat.users) {
+                                    if(uId != userId) addRemaining(chat, uId, exercise, reps);
+                                }
+
+                                // response.newLine("" + linkUser(getUserName(message.from), userId) + "* ist am Machen!*");
+                                response.newLine("*Weitere* `" + reps + "` `" + exercise + "` *von* " + linkUser(getUserName(message.from), userId));
+                                // response.newLine(linkUser(getUserName(message.from), userId) + " legt vor");
+                                // sendMessage(chatId, chat.users[userId].name + " machts vor!");
+                                sendMessage(chatId, response.render());
+
+                                chatChanged = true;
+                            }
+                        }
                     }
                 }
                 else {
-                    switch(commandArray[0]) {
-                        // start
-                        // ==============================================================                        
-                        case "/start": {
-                            if(!chat.users.hasOwnProperty(userId)) {
-                                chat.users[userId] = new UserData(userId, message.from.first_name, message.from.username);
-                                sendMessage(chatId, "*Willkommen beim flexn, " + userName + "!*\nHilfe findest du unter /help");
-                                chatChanged = true;
-                            }
-                            
+
+                }
+                break;
+            }
+
+
+            // done
+            // ==============================================================
+            case "/done": {
+                let reps = parseInt(commandArray[1]);
+                if(isNaN(reps)) {
+                    sendMessage(chatId, "Gib a echte Zahl ein zefix!", message.message_id);
+                    // sendMessage(chatId, "Gib a echte Zahl ein etz!", message.message_id);
+                }
+                else if(reps <= 0) {
+                    sendMessage(chatId, "Gib a positive Zahl ein zefix!", message.message_id);
+                }
+                else {
+                    let response = new TextForm();
+
+                    let alias = commandArray[2];
+                    let exercise;
+
+                    if(chat.exerciseAliases.hasOwnProperty(alias))  exercise = chat.exerciseAliases[alias];
+                    else                                            exercise = alias;
+
+                    if(!chat.exerciseReps.hasOwnProperty(exercise)) {
+                        response.newLine("Unbekannte Übung", "*");
+                        response.newLine("Verwende /exercise, um eine neue Übung hinzuzufügen");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else {
+                        addRemaining(chat, userId, exercise, -reps);
+
+                        if(!chat.users[userId].totalReps.hasOwnProperty(exercise))
+                            chat.users[userId].totalReps[exercise] = 0;
+
+                        chat.users[userId].totalReps[exercise] += reps;
+
+                        let remainder = getRemaining(chat, userId, exercise);
+                        response.newLine("*Nicer dicer!* " + "@" + getUserName(message.from));
+                        response.newLine("Du musst noch `" + remainder + " " + exercise + "` machen");
+                        sendMessage(chatId, response.render());
+
+                        chatChanged = true;
+                    }
+                }
+                break;
+            }
+
+
+            // exercise
+            // ==============================================================
+            case "/exercise": {
+                if(commandArray.length === 2) {
+                    let response = new TextForm();
+                    let newEx = commandArray[1];
+                    if(chat.exerciseAliases.hasOwnProperty(newEx)) {
+                        response.newLine("`" + newEx + "` ist bereits ein Alias für `" + chat.exerciseAliases[newEx] + "`");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else if(chat.exerciseReps.hasOwnProperty(newEx)) {
+                        response.newLine("Ich kenne `" + newEx + "` schon");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else {
+                        chat.exerciseReps[newEx] = 0;
+                        response.newLine("*Ich kenne jetzt* `" + newEx + "`");
+                        sendMessage(chatId, response.render());
+                        chatChanged = true;
+                    }
+                }
+                break;
+            }
+
+
+            // exercises
+            // ==============================================================
+            case "/exercises": {
+                let response = new TextForm();
+                let table = new TableForm("Rekord");
+
+                response.newLine("Übungen", "*");
+                for(let exercise in chat.exerciseReps) {
+                    table.newEntry(""+exercise, [chat.exerciseReps[exercise]]);
+                    // response.newLine()
+                    // response += exercise + ": " + chat.exerciseReps[exercise] + "\n";
+                }
+                response.newLine("```" + table.render() + "```");
+                sendMessage(chatId, response.render());
+                break;
+            }
+
+
+            // alias
+            // ==============================================================
+            case "/alias": {
+                if(commandArray.length === 3) {
+                    let response = new TextForm();
+                    let exercise = commandArray[1];
+                    if(!chat.exerciseReps.hasOwnProperty(exercise)) {
+                        response.newLine("*Unbekannte Übung* `" + exercise + "`!");
+                        response.newLine("Mit /exercises siehst du alle Übungen");
+                        // response.newLine("/exercise kannst du neue Übungen hinzufügen");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else {
+                        let alias = commandArray[2];
+                        chat.exerciseAliases[alias] = exercise;
+                        chatChanged = true;
+                        sendMessage(chatId, "*Ihr könnt jetzt*` " + alias + " `*anstatt*` " + exercise + " `*schreiben*");
+                    }
+
+                }
+                else {
+                    sendMessage(chatId, "Du musst eine Übung und ein Pseudonym angeben!", message.message_id);
+                }
+                break;
+            }
+
+
+            // aliases
+            // ==============================================================
+            case "/aliases": {
+                let mapping = new Map();
+                for(let alias in chat.exerciseAliases) {
+                    if(!mapping.has(chat.exerciseAliases[alias]))
+                        mapping.set(chat.exerciseAliases[alias], []);
+
+                    mapping.get(chat.exerciseAliases[alias]).push(alias);
+                }
+
+                let response = new TextForm();
+
+                let table = new TableForm("Bezeichnungen");
+                mapping.forEach((aliasArr, ex) => {
+                    table.newEntry(ex, [aliasArr.join(", ")]);
+                })
+
+                response.newLine("```" + table.render() + "```");
+                sendMessage(chatId, response.render());
+                break;
+            }
+
+
+            // stats
+            // ==============================================================                 
+            case "/stats": {
+                let playerName = null;
+                let playerLink = null;
+                let playerId = null;
+                if(commandArray.length === 1) {
+                    playerId = userId;
+                    playerLink = linkUser(userName, userId);
+                }
+                else if(commandArray.length === 2) {
+                    let userRef = commandArray[1];
+                    if(userRef.startsWith("@")) {
+                        playerName = userRef.slice(1);
+                    }
+                    else {
+                        playerName = userRef.slice();
+                    }
+
+                    for(let uId in chat.users) {
+                        if((chat.users[uId].hasOwnProperty("username") && chat.users[uId].username === playerName) ||
+                        (chat.users[uId].hasOwnProperty("name") && chat.users[uId].name === playerName))
+                        {
+                            playerId = uId;
+                            playerLink = linkUser(playerName, uId);
                             break;
                         }
-
-    
-                        // machma
-                        // ==============================================================
-                        case "/machma": {
-                            let response = new TextForm();
-
-                            if(commandArray.length >= 3) {
-                                let alias = commandArray[2];
-                                let exercise = chat.exerciseAliases.hasOwnProperty(alias) ? chat.exerciseAliases[alias] : alias;
-
-                                if(!chat.exerciseReps.hasOwnProperty(exercise)) {
-                                    response.newLine("Unbekannte Übung", "*");
-                                    response.newLine("Verwende /exercise, um eine neue Übung hinzuzufügen");
-                                    sendMessage(chatId, response.render(), message.message_id);
-                                }
-                                else {
-                                    let reps = parseInt(commandArray[1]);
-                                    if(isNaN(reps)) {
-                                        sendMessage(chatId, "Gib a echte Zahl ein zefix!", message.message_id);
-                                    }
-                                    else if(reps <= 0){
-                                        sendMessage(chatId, "Gib a postive Zahl ein zefix!", message.message_id);
-                                    }
-                                    else {
-                                        let remainder = getRemaining(chat, userId, exercise);
-                                        if(remainder > 0) {
-                                            response.newLine("Machma erstmal deine `" + remainder + "` `" + exercise + "`");
-                                            sendMessage(chatId, response.render(), message.message_id);
-                                        }
-                                        else {
-                                            // update total reps for this exercise in chat
-                                            if(!chat.exerciseReps.hasOwnProperty(exercise))
-                                                chat.exerciseReps[exercise] = 0;
-            
-                                            chat.exerciseReps[exercise] += reps;
-            
-                                            // update total reps for this exercise of this user
-                                            if(!chat.users[userId].totalReps.hasOwnProperty(exercise))
-                                                chat.users[userId].totalReps[exercise] = 0;
-            
-                                            chat.users[userId].totalReps[exercise] += reps;
-            
-                                            // update exercise remainder for all remaining users in chat
-                                            for(let uId in chat.users) {
-                                                if(uId != userId) addRemaining(chat, uId, exercise, reps);
-                                            }
-            
-                                            // response.newLine("" + linkUser(getUserName(message.from), userId) + "* ist am Machen!*");
-                                            response.newLine("*Weitere* `" + reps + "` `" + exercise + "` *von* " + linkUser(getUserName(message.from), userId));
-                                            // response.newLine(linkUser(getUserName(message.from), userId) + " legt vor");
-                                            // sendMessage(chatId, chat.users[userId].name + " machts vor!");
-                                            sendMessage(chatId, response.render());
-
-                                            chatChanged = true;
-                                        }
-                                    }
-                                }
-                            }
-                            else {
-
-                            }
-                            break;
-                        }
-    
-
-                        // done
-                        // ==============================================================
-                        case "/done": {
-                            let reps = parseInt(commandArray[1]);
-                            if(isNaN(reps)) {
-                                sendMessage(chatId, "Gib a echte Zahl ein zefix!", message.message_id);
-                                // sendMessage(chatId, "Gib a echte Zahl ein etz!", message.message_id);
-                            }
-                            else if(reps <= 0) {
-                                sendMessage(chatId, "Gib a positive Zahl ein zefix!", message.message_id);
-                            }
-                            else {
-                                let response = new TextForm();
-
-                                let alias = commandArray[2];
-                                let exercise;
-        
-                                if(chat.exerciseAliases.hasOwnProperty(alias))  exercise = chat.exerciseAliases[alias];
-                                else                                            exercise = alias;
-
-                                if(!chat.exerciseReps.hasOwnProperty(exercise)) {
-                                    response.newLine("Unbekannte Übung", "*");
-                                    response.newLine("Verwende /exercise, um eine neue Übung hinzuzufügen");
-                                    sendMessage(chatId, response.render(), message.message_id);
-                                }
-                                else {
-                                    let remaining = addRemaining(chat, userId, exercise, -reps);
-    
-                                    if(!chat.users[userId].totalReps.hasOwnProperty(exercise))
-                                        chat.users[userId].totalReps[exercise] = 0;
-    
-                                    chat.users[userId].totalReps[exercise] += (remaining >= 0) ? reps : (reps + remaining);
-    
-                                    let remainder = getRemaining(chat, userId, exercise);
-                                    response.newLine("Nicer dicer!", "*");
-                                    response.newLine("Du musst noch` " + remainder + "` `" + exercise + " `machen");
-                                    sendMessage(chatId, response.render(), message.message_id);
-    
-                                    chatChanged = true;
-                                }
-                            }
-                            break;
-                        }
-
-
-                        // exercise
-                        // ==============================================================
-                        case "/exercise": {
-                            if(commandArray.length === 2) {
-                                let response = new TextForm();
-                                let newEx = commandArray[1];
-                                if(chat.exerciseAliases.hasOwnProperty(newEx)) {
-                                    response.newLine("`" + newEx + "` ist bereits ein Alias für `" + chat.exerciseAliases[newEx] + "`");
-                                    sendMessage(chatId, response.render(), message.message_id);
-                                }
-                                else if(chat.exerciseReps.hasOwnProperty(newEx)) {
-                                    response.newLine("Ich kenne `" + newEx + "` schon");
-                                    sendMessage(chatId, response.render(), message.message_id);
-                                }
-                                else {
-                                    chat.exerciseReps[newEx] = 0;
-                                    response.newLine("*Ich kenne jetzt* `" + newEx + "`");
-                                    sendMessage(chatId, response.render());
-                                    chatChanged = true;
-                                }
-                            }
-                            break;
-                        }
-
-
-                        // exercises
-                        // ==============================================================
-                        case "/exercises": {
-                            let response = new TextForm();
-                            let table = new TableForm("Rekord");
-
-                            response.newLine("Übungen", "*");
-                            for(let exercise in chat.exerciseReps) {
-                                table.newEntry(""+exercise, [chat.exerciseReps[exercise]]);
-                                // response.newLine()
-                                // response += exercise + ": " + chat.exerciseReps[exercise] + "\n";
-                            }
-                            response.newLine("```" + table.render() + "```");
-                            sendMessage(chatId, response.render());
-                            break;
-                        }
-    
-
-                        // alias
-                        // ==============================================================
-                        case "/alias": {
-                            if(commandArray.length === 3) {
-                                let response = new TextForm();
-                                let exercise = commandArray[1];
-                                if(!chat.exerciseReps.hasOwnProperty(exercise)) {
-                                    response.newLine("*Unbekannte Übung* `" + exercise + "`!");
-                                    response.newLine("Mit /exercises siehst du alle Übungen");
-                                    // response.newLine("/exercise kannst du neue Übungen hinzufügen");
-                                    sendMessage(chatId, response.render(), message.message_id);
-                                }
-                                else {
-                                    let alias = commandArray[2];
-                                    chat.exerciseAliases[alias] = exercise;
-                                    chatChanged = true;
-                                    sendMessage(chatId, "*Ihr könnt jetzt*` " + alias + " `*anstatt*` " + exercise + " `*schreiben*");
-                                }
-
-                            }
-                            else {
-                                sendMessage(chatId, "Du musst eine Übung und ein Pseudonym angeben!", message.message_id);
-                            }
-                            break;
-                        }
-
-
-                        // aliases
-                        // ==============================================================
-                        case "/aliases": {
-                            let mapping = new Map();
-                            for(let alias in chat.exerciseAliases) {
-                                if(!mapping.has(chat.exerciseAliases[alias]))
-                                    mapping.set(chat.exerciseAliases[alias], []);
-
-                                mapping.get(chat.exerciseAliases[alias]).push(alias);
-                            }
-
-                            let response = new TextForm();
-
-                            let table = new TableForm("Bezeichnungen");
-                            mapping.forEach((aliasArr, ex) => {
-                                table.newEntry(ex, [aliasArr.join(", ")]);
-                            })
-
-                            response.newLine("```" + table.render() + "```");
-                            sendMessage(chatId, response.render());
-                            break;
-                        }
-    
-
-                        // stats
-                        // ==============================================================                 
-                        case "/stats": {
-                            let playerName = null;
-                            let playerLink = null;
-                            let playerId = null;
-                            if(commandArray.length === 1) {
-                                playerId = userId;
-                                playerLink = linkUser(userName, userId);
-                            }
-                            else if(commandArray.length === 2) {
-                                let userRef = commandArray[1];
-                                if(userRef.startsWith("@")) {
-                                    playerName = userRef.slice(1);
-                                }
-                                else {
-                                    playerName = userRef.slice();
-                                }
-
-                                for(let uId in chat.users) {
-                                    if((chat.users[uId].hasOwnProperty("username") && chat.users[uId].username === playerName) ||
-                                       (chat.users[uId].hasOwnProperty("name") && chat.users[uId].name === playerName))
-                                    {
-                                        playerId = uId;
-                                        playerLink = linkUser(playerName, uId);
-                                        break;
-                                    }
-                                }
-                            }
-
-                            if(playerId != null) {
-                                let table = new TableForm("Todo", "Done");
-                                let response = "*Statistik für *" + playerLink + "\n";
-                                response += "```";
-                                for(let exercise in chat.exerciseReps) {
-                                    table.newEntry(
-                                        exercise, 
-                                        [
-                                            getRemaining(chat, playerId, exercise), 
-                                            ((!chat.users.hasOwnProperty(playerId) || !chat.users[playerId].totalReps.hasOwnProperty(exercise)) ? 0 : chat.users[playerId].totalReps[exercise])
-                                        ]
-                                    );
-                                }
-                                response += table.render();
-                                response += "```";
-                                sendMessage(chatId, response);    
-                            }
-
-                            else {
-                                sendMessage(chatId, "*Ich kenne* _" + playerName + "_ *(noch) nicht*")
-                            }
-
-                            break;
-                        }
-
-
-                        // players
-                        // ==============================================================     
-                        case "/players": {
-                            let response = new TextForm();
-                            response.newLine("Die Macher der Gruppe", "*");
-
-                            let table = new TableForm();
-                            for(let uId in chat.users) {
-                                table.newEntry(getUserNameFromData(chat.users[uId]), []);
-                                // response.newLine(getUserNameFromData(chat.users[uId]), "_");
-                            }
-
-                            response.newLine("```" + table.render() + "```");
-                            sendMessage(chatId, response.render());
-                            break;
-                        }
-
-    
-                        // help
-                        // ==============================================================          
-                        case "/help": {
-                            let response = new TextForm();
-                            response.newLine("*Flex mit anderen in der Quarantäne!*\n");
-                            response.newLine("/start");
-                            response.newLine("_Trete dem Machen bei_\n");
-
-                            response.newLine("/machma` [reps] [exercise] `");
-                            response.newLine("_Gib den Lauchs was zu tun_\n");
-
-                            response.newLine("/done` [reps] [exercise] `");
-                            response.newLine("_Lasse dir Wiederholungen anrechnen_\n");
-
-                            response.newLine("/exercise` [name] `");
-                            response.newLine("_Füge der Gruppe eine neue Übung hinzu_\n");
-
-                            response.newLine("/exercises");
-                            response.newLine("_Sieh' dir alle Übungen an_\n");
-
-                            response.newLine("/alias` [exercise] [bezeichnung] `");
-                            response.newLine("_Lege eine weitere Bezeichnung für eine Übung fest_\n");
-
-                            response.newLine("/stats ` [player - optional] `");
-                            response.newLine("_Sieh dir deine Statistik an_\n");
-
-                            response.newLine("/players ` `");
-                            response.newLine("_Zeige alle Mitflexer an_\n");
-
-                            sendMessage(chatId, response.render());
-                            // response += "/propose *vorschlag* für Funktionsvorschläge" + "\n";
-                            break;
-                        }
-
-
-                        case "/f": {
-                            let response = "*JOJ**O** peünis vergergergergregerh\nferertwertzezwerzrzz* _rooolf_";
-                            sendMessage(chatId, response);
-                            break;
-                        }
-    
-                        // default: {
-                        //     if(!chat.users.hasOwnProperty(userId)) {
-                        //         sendMessage(chatId, "Du bist dem flexn noch nicht beigetreten! Beginne mit /start", "Markdown");
-                        //     }
-                        //     break;
-                        // }
                     }
                 }
 
-                if(chatChanged) {
-                    // console.log("collectioning ...");
-                    // console.log(err2);
-                    collection.update({id: chatId}, chat).then(() => db.close());
+                if(playerId != null) {
+                    let table = new TableForm("Todo", "Done");
+                    let response = "*Statistik für *" + playerLink + "\n\n";
+                    response += "```";
+                    for(let exercise in chat.exerciseReps) {
+                        table.newEntry(
+                            exercise, 
+                            [
+                                getRemaining(chat, playerId, exercise), 
+                                ((!chat.users.hasOwnProperty(playerId) || !chat.users[playerId].totalReps.hasOwnProperty(exercise)) ? 0 : chat.users[playerId].totalReps[exercise])
+                            ]
+                        );
+                    }
+                    response += table.render();
+                    response += "```";
+                    sendMessage(chatId, response);    
                 }
-            });
-        });
-    });
+
+                else {
+                    sendMessage(chatId, "*Ich kenne* _" + playerName + "_ *(noch) nicht*")
+                }
+
+                break;
+            }
+
+
+            // players
+            // ==============================================================     
+            case "/players": {
+                let response = new TextForm();
+                response.newLine("Die Macher der Gruppe", "*");
+
+                let table = new TableForm();
+                for(let uId in chat.users) {
+                    table.newEntry(getUserNameFromData(chat.users[uId]), []);
+                    // response.newLine(getUserNameFromData(chat.users[uId]), "_");
+                }
+
+                response.newLine("```" + table.render() + "```");
+                sendMessage(chatId, response.render());
+                break;
+            }
+
+
+            // help
+            // ==============================================================          
+            case "/help": {
+                let response = new TextForm();
+                response.newLine("*Flex mit anderen in der Quarantäne!*\n");
+                response.newLine("/start");
+                response.newLine("_Trete dem Machen bei_\n");
+
+                response.newLine("/machma` [reps] [exercise] `");
+                response.newLine("_Gib den Lauchs was zu tun_\n");
+
+                response.newLine("/done` [reps] [exercise] `");
+                response.newLine("_Lasse dir Wiederholungen anrechnen_\n");
+
+                response.newLine("/exercise` [name] `");
+                response.newLine("_Füge der Gruppe eine neue Übung hinzu_\n");
+
+                response.newLine("/exercises");
+                response.newLine("_Sieh' dir alle Übungen an_\n");
+
+                response.newLine("/alias` [exercise] [bezeichnung] `");
+                response.newLine("_Lege eine weitere Bezeichnung für eine Übung fest_\n");
+
+                response.newLine("/stats ` [player - optional] `");
+                response.newLine("_Sieh dir deine Statistik an_\n");
+
+                response.newLine("/players ` `");
+                response.newLine("_Zeige alle Mitflexer an_\n");
+
+                sendMessage(chatId, response.render());
+                // response += "/propose *vorschlag* für Funktionsvorschläge" + "\n";
+                break;
+            }
+
+
+            case "/f": {
+                let response = "*JOJ**O** peünis vergergergergregerh\nferertwertzezwerzrzz* _rooolf_";
+                sendMessage(chatId, response);
+                break;
+            }
+
+            // default: {
+            //     if(!chat.users.hasOwnProperty(userId)) {
+            //         sendMessage(chatId, "Du bist dem flexn noch nicht beigetreten! Beginne mit /start", "Markdown");
+            //     }
+            //     break;
+            // }
+        }
+    }
+}
+
+function processCommand(chatId, userId, userName, commandArray, message) {
+    // Temporary only to update db
+    if(chat.users.hasOwnProperty(userId)) {
+        chat.users[userId].id = userId;
+        if(message.from.first_name != null) chat.users[userId].name = message.from.first_name;
+        if(message.from.username != null) chat.users[userId].username = message.from.username;
+        chatChanged = true;
+    }
+
+    if(commandArray[0] !== "/start" && commandArray[0] !== "/help" && !chat.users.hasOwnProperty(userId)) {
+        if(!chat.users.hasOwnProperty(userId)) {
+            sendMessage(chatId, "Du bist dem flexn noch nicht beigetreten! Beginne mit /start", "Markdown");
+        }
+    }
+    else {
+        switch(commandArray[0]) {
+            // start
+            // ==============================================================                        
+            case "/start": {
+                if(!chat.users.hasOwnProperty(userId)) {
+                    chat.users[userId] = new UserData(userId, message.from.first_name, message.from.username);
+                    sendMessage(chatId, "*Willkommen beim flexn, " + userName + "!*\nHilfe findest du unter /help");
+                    chatChanged = true;
+                }
+                
+                break;
+            }
+
+
+            // machma
+            // ==============================================================
+            case "/machma": {
+                let response = new TextForm();
+
+                if(commandArray.length >= 3) {
+                    let alias = commandArray[2];
+                    let exercise = chat.exerciseAliases.hasOwnProperty(alias) ? chat.exerciseAliases[alias] : alias;
+
+                    if(!chat.exerciseReps.hasOwnProperty(exercise)) {
+                        response.newLine("Unbekannte Übung", "*");
+                        response.newLine("Verwende /exercise, um eine neue Übung hinzuzufügen");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else {
+                        let reps = parseInt(commandArray[1]);
+                        if(isNaN(reps)) {
+                            sendMessage(chatId, "Gib a echte Zahl ein zefix!", message.message_id);
+                        }
+                        else if(reps <= 0){
+                            sendMessage(chatId, "Gib a postive Zahl ein zefix!", message.message_id);
+                        }
+                        else {
+                            let remainder = getRemaining(chat, userId, exercise);
+                            if(remainder > 0) {
+                                response.newLine("Machma erstmal deine `" + remainder + "` `" + exercise + "`");
+                                sendMessage(chatId, response.render(), message.message_id);
+                            }
+                            else {
+                                // update total reps for this exercise in chat
+                                if(!chat.exerciseReps.hasOwnProperty(exercise))
+                                    chat.exerciseReps[exercise] = 0;
+
+                                chat.exerciseReps[exercise] += reps;
+
+                                // update total reps for this exercise of this user
+                                if(!chat.users[userId].totalReps.hasOwnProperty(exercise))
+                                    chat.users[userId].totalReps[exercise] = 0;
+
+                                chat.users[userId].totalReps[exercise] += reps;
+
+                                // update exercise remainder for all remaining users in chat
+                                for(let uId in chat.users) {
+                                    if(uId != userId) addRemaining(chat, uId, exercise, reps);
+                                }
+
+                                // response.newLine("" + linkUser(getUserName(message.from), userId) + "* ist am Machen!*");
+                                response.newLine("*Weitere* `" + reps + "` `" + exercise + "` *von* " + linkUser(getUserName(message.from), userId));
+                                // response.newLine(linkUser(getUserName(message.from), userId) + " legt vor");
+                                // sendMessage(chatId, chat.users[userId].name + " machts vor!");
+                                sendMessage(chatId, response.render());
+
+                                chatChanged = true;
+                            }
+                        }
+                    }
+                }
+                else {
+
+                }
+                break;
+            }
+
+
+            // done
+            // ==============================================================
+            case "/done": {
+                let reps = parseInt(commandArray[1]);
+                if(isNaN(reps)) {
+                    sendMessage(chatId, "Gib a echte Zahl ein zefix!", message.message_id);
+                    // sendMessage(chatId, "Gib a echte Zahl ein etz!", message.message_id);
+                }
+                else if(reps <= 0) {
+                    sendMessage(chatId, "Gib a positive Zahl ein zefix!", message.message_id);
+                }
+                else {
+                    let response = new TextForm();
+
+                    let alias = commandArray[2];
+                    let exercise;
+
+                    if(chat.exerciseAliases.hasOwnProperty(alias))  exercise = chat.exerciseAliases[alias];
+                    else                                            exercise = alias;
+
+                    if(!chat.exerciseReps.hasOwnProperty(exercise)) {
+                        response.newLine("Unbekannte Übung", "*");
+                        response.newLine("Verwende /exercise, um eine neue Übung hinzuzufügen");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else {
+                        addRemaining(chat, userId, exercise, -reps);
+
+                        if(!chat.users[userId].totalReps.hasOwnProperty(exercise))
+                            chat.users[userId].totalReps[exercise] = 0;
+
+                        chat.users[userId].totalReps[exercise] += reps;
+
+                        let remainder = getRemaining(chat, userId, exercise);
+                        response.newLine("*Nicer dicer!* " + "@" + getUserName(message.from));
+                        response.newLine("Du musst noch `" + remainder + " " + exercise + "` machen");
+                        sendMessage(chatId, response.render());
+
+                        chatChanged = true;
+                    }
+                }
+                break;
+            }
+
+
+            // exercise
+            // ==============================================================
+            case "/exercise": {
+                if(commandArray.length === 2) {
+                    let response = new TextForm();
+                    let newEx = commandArray[1];
+                    if(chat.exerciseAliases.hasOwnProperty(newEx)) {
+                        response.newLine("`" + newEx + "` ist bereits ein Alias für `" + chat.exerciseAliases[newEx] + "`");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else if(chat.exerciseReps.hasOwnProperty(newEx)) {
+                        response.newLine("Ich kenne `" + newEx + "` schon");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else {
+                        chat.exerciseReps[newEx] = 0;
+                        response.newLine("*Ich kenne jetzt* `" + newEx + "`");
+                        sendMessage(chatId, response.render());
+                        chatChanged = true;
+                    }
+                }
+                break;
+            }
+
+
+            // exercises
+            // ==============================================================
+            case "/exercises": {
+                let response = new TextForm();
+                let table = new TableForm("Rekord");
+
+                response.newLine("Übungen", "*");
+                for(let exercise in chat.exerciseReps) {
+                    table.newEntry(""+exercise, [chat.exerciseReps[exercise]]);
+                    // response.newLine()
+                    // response += exercise + ": " + chat.exerciseReps[exercise] + "\n";
+                }
+                response.newLine("```" + table.render() + "```");
+                sendMessage(chatId, response.render());
+                break;
+            }
+
+
+            // alias
+            // ==============================================================
+            case "/alias": {
+                if(commandArray.length === 3) {
+                    let response = new TextForm();
+                    let exercise = commandArray[1];
+                    if(!chat.exerciseReps.hasOwnProperty(exercise)) {
+                        response.newLine("*Unbekannte Übung* `" + exercise + "`!");
+                        response.newLine("Mit /exercises siehst du alle Übungen");
+                        // response.newLine("/exercise kannst du neue Übungen hinzufügen");
+                        sendMessage(chatId, response.render(), message.message_id);
+                    }
+                    else {
+                        let alias = commandArray[2];
+                        chat.exerciseAliases[alias] = exercise;
+                        chatChanged = true;
+                        sendMessage(chatId, "*Ihr könnt jetzt*` " + alias + " `*anstatt*` " + exercise + " `*schreiben*");
+                    }
+
+                }
+                else {
+                    sendMessage(chatId, "Du musst eine Übung und ein Pseudonym angeben!", message.message_id);
+                }
+                break;
+            }
+
+
+            // aliases
+            // ==============================================================
+            case "/aliases": {
+                let mapping = new Map();
+                for(let alias in chat.exerciseAliases) {
+                    if(!mapping.has(chat.exerciseAliases[alias]))
+                        mapping.set(chat.exerciseAliases[alias], []);
+
+                    mapping.get(chat.exerciseAliases[alias]).push(alias);
+                }
+
+                let response = new TextForm();
+
+                let table = new TableForm("Bezeichnungen");
+                mapping.forEach((aliasArr, ex) => {
+                    table.newEntry(ex, [aliasArr.join(", ")]);
+                })
+
+                response.newLine("```" + table.render() + "```");
+                sendMessage(chatId, response.render());
+                break;
+            }
+
+
+            // stats
+            // ==============================================================                 
+            case "/stats": {
+                let playerName = null;
+                let playerLink = null;
+                let playerId = null;
+                if(commandArray.length === 1) {
+                    playerId = userId;
+                    playerLink = linkUser(userName, userId);
+                }
+                else if(commandArray.length === 2) {
+                    let userRef = commandArray[1];
+                    if(userRef.startsWith("@")) {
+                        playerName = userRef.slice(1);
+                    }
+                    else {
+                        playerName = userRef.slice();
+                    }
+
+                    for(let uId in chat.users) {
+                        if((chat.users[uId].hasOwnProperty("username") && chat.users[uId].username === playerName) ||
+                           (chat.users[uId].hasOwnProperty("name") && chat.users[uId].name === playerName))
+                        {
+                            playerId = uId;
+                            playerLink = linkUser(playerName, uId);
+                            break;
+                        }
+                    }
+                }
+
+                if(playerId != null) {
+                    let table = new TableForm("Todo", "Done");
+                    let response = "*Statistik für *" + playerLink + "\n\n";
+                    response += "```";
+                    for(let exercise in chat.exerciseReps) {
+                        table.newEntry(
+                            exercise, 
+                            [
+                                getRemaining(chat, playerId, exercise), 
+                                ((!chat.users.hasOwnProperty(playerId) || !chat.users[playerId].totalReps.hasOwnProperty(exercise)) ? 0 : chat.users[playerId].totalReps[exercise])
+                            ]
+                        );
+                    }
+                    response += table.render();
+                    response += "```";
+                    sendMessage(chatId, response);    
+                }
+
+                else {
+                    sendMessage(chatId, "*Ich kenne* _" + playerName + "_ *(noch) nicht*")
+                }
+
+                break;
+            }
+
+
+            // players
+            // ==============================================================     
+            case "/players": {
+                let response = new TextForm();
+                response.newLine("Die Macher der Gruppe", "*");
+
+                let table = new TableForm();
+                for(let uId in chat.users) {
+                    table.newEntry(getUserNameFromData(chat.users[uId]), []);
+                    // response.newLine(getUserNameFromData(chat.users[uId]), "_");
+                }
+
+                response.newLine("```" + table.render() + "```");
+                sendMessage(chatId, response.render());
+                break;
+            }
+
+
+            // help
+            // ==============================================================          
+            case "/help": {
+                let response = new TextForm();
+                response.newLine("*Flex mit anderen in der Quarantäne!*\n");
+                response.newLine("/start");
+                response.newLine("_Trete dem Machen bei_\n");
+
+                response.newLine("/machma` [reps] [exercise] `");
+                response.newLine("_Gib den Lauchs was zu tun_\n");
+
+                response.newLine("/done` [reps] [exercise] `");
+                response.newLine("_Lasse dir Wiederholungen anrechnen_\n");
+
+                response.newLine("/exercise` [name] `");
+                response.newLine("_Füge der Gruppe eine neue Übung hinzu_\n");
+
+                response.newLine("/exercises");
+                response.newLine("_Sieh' dir alle Übungen an_\n");
+
+                response.newLine("/alias` [exercise] [bezeichnung] `");
+                response.newLine("_Lege eine weitere Bezeichnung für eine Übung fest_\n");
+
+                response.newLine("/stats ` [player - optional] `");
+                response.newLine("_Sieh dir deine Statistik an_\n");
+
+                response.newLine("/players ` `");
+                response.newLine("_Zeige alle Mitflexer an_\n");
+
+                sendMessage(chatId, response.render());
+                // response += "/propose *vorschlag* für Funktionsvorschläge" + "\n";
+                break;
+            }
+
+
+            case "/f": {
+                let response = "*JOJ**O** peünis vergergergergregerh\nferertwertzezwerzrzz* _rooolf_";
+                sendMessage(chatId, response);
+                break;
+            }
+
+            // default: {
+            //     if(!chat.users.hasOwnProperty(userId)) {
+            //         sendMessage(chatId, "Du bist dem flexn noch nicht beigetreten! Beginne mit /start", "Markdown");
+            //     }
+            //     break;
+            // }
+        }
+    }
 }
 
 function sendMessage(chatId, text, messageId) {
@@ -517,13 +973,8 @@ function addRemaining(chat, userId, exercise, count) {
         chat.users[userId].remainders[exercise] = 0;
 
     chat.users[userId].remainders[exercise] += count;
-
-    let remaining = chat.users[userId].remainders[exercise];
-
-    if(remaining < 0) 
+    if(chat.users[userId].remainders[exercise] < 0) 
         chat.users[userId].remainders[exercise] = 0;
-
-    return remaining;
 }
 
 function getRemaining(chat, userId, exercise) {
@@ -537,18 +988,18 @@ function getRemaining(chat, userId, exercise) {
 
 const GET = function(functionName, paramString) {
     return {
-        hostname: "api.telegram.org",
+        hostname: config.HOST,
         port: 443,
-        path: '/bot' + token + "/" + functionName + ((paramString != null && paramString != "") ? paramString : ""),
+        path: '/bot' + config.BOT_TOKEN + "/" + functionName + ((paramString != null && paramString != "") ? paramString : ""),
         method: 'GET'
     };
 }
 
 const POST = function(functionName, data) {
     return {
-        hostname: "api.telegram.org",
+        hostname: config.HOST,
         port: 443,
-        path: '/bot' + token + "/" + functionName,
+        path: '/bot' + config.BOT_TOKEN + "/" + functionName,
         method: 'POST',
         headers: {
             'Content-Type': 'application/json',
@@ -586,11 +1037,11 @@ class TableForm {
     constructor(...columns) {
         this.properties = columns; // Array<String>
         this.longestPropertyName = this.properties.reduce((acc, curr) => curr.length > acc ? curr.length : acc, 0);
-        this.propertyNameOffset = 5;
+        this.propertyNameOffset = 3;
 
         this.entries = new Map();
         this.longestEntryName = 0;
-        this.entryNameOffset = 5;
+        this.entryNameOffset = 3;
     }
 
     newEntry(name, values) {
