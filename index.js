@@ -231,12 +231,12 @@ function processCommand(chatId, userId, userName, commandArray, message) {
                                     sendMessage(chatId, response.render(), message.message_id);
                                 }
                                 else {
-                                    addRemaining(chat, userId, exercise, -reps);
+                                    let remaining = addRemaining(chat, userId, exercise, -reps);
     
                                     if(!chat.users[userId].totalReps.hasOwnProperty(exercise))
                                         chat.users[userId].totalReps[exercise] = 0;
     
-                                    chat.users[userId].totalReps[exercise] += reps;
+                                    chat.users[userId].totalReps[exercise] += (remaining >= 0) ? reps : (reps + remaining);
     
                                     let remainder = getRemaining(chat, userId, exercise);
                                     response.newLine("Nicer dicer!", "*");
@@ -517,8 +517,13 @@ function addRemaining(chat, userId, exercise, count) {
         chat.users[userId].remainders[exercise] = 0;
 
     chat.users[userId].remainders[exercise] += count;
-    if(chat.users[userId].remainders[exercise] < 0) 
+
+    let remaining = chat.users[userId].remainders[exercise];
+
+    if(remaining < 0) 
         chat.users[userId].remainders[exercise] = 0;
+
+    return remaining;
 }
 
 function getRemaining(chat, userId, exercise) {
