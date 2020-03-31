@@ -586,11 +586,11 @@ class TableForm {
     constructor(...columns) {
         this.properties = columns; // Array<String>
         this.longestPropertyName = this.properties.reduce((acc, curr) => curr.length > acc ? curr.length : acc, 0);
-        this.propertyNameOffset = 5;
+        this.propertyNameOffset = 2;
 
         this.entries = new Map();
         this.longestEntryName = 0;
-        this.entryNameOffset = 5;
+        this.entryNameOffset = 2;
     }
 
     newEntry(name, values) {
