@@ -28,6 +28,8 @@ class UserData {
 }
 
 
+
+
 var lastUpdateId = null;
 // var chats = new Map(); // Map<chatId, ChatData>
 
@@ -76,6 +78,7 @@ setInterval(() => {
                                 for(let i = 0; i < offsets.length; ++i) {
                                     let commandStr = update.message.text.slice(offsets[i], (i < offsets.length-1) ? offsets[i+1] : update.message.text.length);
                                     let commandArr = commandStr.split(/\ +/);
+                                    commandArr = commandArr.map(c => c.toLowerCase());
                                     console.log(commandArr);
                                     processCommand(update.message.chat.id, update.message.from.id, update.message.from.first_name, commandArr, update.message);
                                 }
@@ -122,6 +125,8 @@ function processCommand(chatId, userId, userName, commandArray, message) {
                 }
 
                 if(commandArray[0] !== "/start" && commandArray[0] !== "/help" && !chat.users.hasOwnProperty(userId)) {
+                    console.log("chatId");
+                    console.log(chatId);
                     if(!chat.users.hasOwnProperty(userId)) {
                         sendMessage(chatId, "Du bist dem flexn noch nicht beigetreten! Beginne mit /start", "Markdown");
                     }
