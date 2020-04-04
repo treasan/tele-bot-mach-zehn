@@ -79,6 +79,9 @@ setInterval(() => {
                                     let commandStr = update.message.text.slice(offsets[i], (i < offsets.length-1) ? offsets[i+1] : update.message.text.length);
                                     let commandArr = commandStr.split(/\ +/);
                                     commandArr = commandArr.map(c => c.toLowerCase());
+                                    if(commandArr.length > 0 && commandArr[0].endsWith("@MachMaBot".toLowerCase())) {
+                                        commandArr[0] = commandArr[0].slice(0, commandArr[0].length - "@MachMaBot".toLowerCase().length);
+                                    }
                                     console.log(commandArr);
                                     processCommand(update.message.chat.id, update.message.from.id, update.message.from.first_name, commandArr, update.message);
                                 }
