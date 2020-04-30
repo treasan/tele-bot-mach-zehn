@@ -25,6 +25,7 @@
   },
   "homepage": "https://github.com/Tomsen1410/tele-bot-mach-zehn#readme",
   "dependencies": {
-    "mongodb": "~2.2.0"
+    "mongodb": "~2.2.0",
+    "node-telegram-bot-api": "^0.40.0"
   }
 }

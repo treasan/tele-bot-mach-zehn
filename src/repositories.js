@@ -5,6 +5,11 @@ class UserRepository {
         this.cachedUserEntities = {};
     }
 
+    /**
+     * 
+     * @param {number} id 
+     * @return {Promise<UserEntity>}
+     */
     async findById(id) {
         if(this.userCollection === null) {
             this.userCollection = await this.db.collection("users");
@@ -49,16 +54,6 @@ class UserRepository {
 
         return user;
     }
-
-    addTaskRepetitions(taskId, groupId, repetitions) {
-        if(!this.taskRepetitions.hasOwnProperty(taskId))
-            this.taskRepetitions[taskId] = {};
-          
-        if(!this.taskRepetitions[taskId].hasOwnProperty(groupId))
-            this.taskRepetitions[taskId][groupId] = 0;
-
-            this.taskRepetitions[taskId][groupId] += repetitions;
-    }
 }
 
 
@@ -86,6 +81,11 @@ class ChatRepository {
         return this.cachedChatEntities[id];
     }
 
+    /**
+     * 
+     * @param {number} id 
+     * @return {Promise<GroupChatEntity>}
+     */
     async findGroupById(id) {
         if(this.groupChatCollection === null) {
             this.groupChatCollection = await this.db.collection("group_chats");
@@ -98,7 +98,20 @@ class ChatRepository {
         return this.cachedChatEntities[id];
     }
 
-    async findPrivateById(privateId) {
+    /**
+     * 
+     * @param {Array<number>} ids 
+     */
+    async findGroupsByIds(ids) {
+        return Promise.all(ids.map(id => this.findGroupById(id)));
+    }
+
+    /**
+     * 
+     * @param {number} id 
+     * @return {Promise<PrivateChatEntity>}
+     */
+    async findPrivateById(id) {
         if(this.privateChatCollection === null) {
             this.privateChatCollection = await this.db.collection("private_chats");
         }
