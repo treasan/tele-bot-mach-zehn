@@ -5,3 +5,12 @@
 	--> vllt. mit abstand zu vorderem
 - mit feedback abhängig von früheren leistungen:
 	-> zb eigenen durchschnitt anzeigen
+
+
+1) gewichtung pro x
+
+2) absolute zahlen, aber man kämpft nur mit direkten nachbarn (ka wie genau):
+	zb [750, 730, 600, 430, 210, 180, 100, 30, 0]
+
+	-> [ 20, 130, 170, 220,  30,  80,  70, 30]
+

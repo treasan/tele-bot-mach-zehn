@@ -1,111 +1,143 @@
 // imports
-const config = require("../config");
-const TelegramBot = require('node-telegram-bot-api');
+import * as config from "./../config.js"
+
 const mongoClient = require("mongodb").MongoClient;
+const TelegramBot = require('node-telegram-bot-api');
 
 
-// bot api instance
-const telegramBot = new TelegramBot(config.BOT_TOKEN, {polling: true});
+// connect to mongo *once* and reuse connection in order to optimize pooling
+const db = await mongoClient.connect(config.DB_URL);
 
 
-async function processUpdates(updates) {
-    const db = await mongoClient.connect(config.DB_URL);
-    const messages = [];
-
-    updates.forEach(u => {
-        if(u.hasOwnProperty("message")) messages.push(u.message);
-    });
-
-    await processMessages(messages, db);
-
-    await db.close();
-}
+// create repositories for entities as an additional layer of abstraction
+const userRepo = new UserRepository(db);
+const chatRepo = new ChatRepository(db);
+const taskRepo = new TaskRepository(db);
 
 
-async function processMessages(messages, db) {
-    let userRepo = new UserRepository(db);
-    let chatRepo = new ChatRepository(db);
-    let taskRepo = new TaskRepository(db);
+// create the bot api instance
+const api = new TelegramBot(config.BOT_TOKEN, {polling: true});
 
-    let chat, user;
 
-    messages.forEach(m => {
-        if(m.chat.type === "private") {
-            chat = await chatRepo.findPrivateById(m.chat.id);
 
-            if(chat == null) {
-                chatRepo.createPrivate(m.chat.id);
-            }
-        } else if(m.chat.type === "group") {
-            chat = await chatRepo.findGroupById(m.chat.id);
+// async function processUpdates(updates) {
+//     // const db = await mongoClient.connect(config.DB_URL);
+//     const messages = [];
 
-            if(chat == null) {
-                chatRepo.createGroup(m.chat.id);
-            }
+//     updates.forEach(u => {
+//         if(u.hasOwnProperty("message")) messages.push(u.message);
+//     });
+
+//     await processMessages(messages, db);
+
+//     // await db.close();
+// }
+
+
+// async function processMessages(messages, db) {
+//     let chat, user;
+
+//     messages.forEach(m => {
+//         if(m.chat.type === "private") {
+//             chat = await chatRepo.findPrivateById(m.chat.id);
+
+//             if(chat == null) {
+//                 chatRepo.createPrivate(m.chat.id);
+//             }
+//         } else if(m.chat.type === "group") {
+//             chat = await chatRepo.findGroupById(m.chat.id);
+
+//             if(chat == null) {
+//                 chatRepo.createGroup(m.chat.id);
+//             }
+//         }
+
+//         user = await userRepo.createOrUpdateFromMessageJson(m);
+//     })
+
+//     let updateAccumulator = new UpdateAccumulator();
+    
+//     let offs;
+//     messages.forEach(m => {
+//         offs = [];
+
+//         m.entities.forEach(e => {
+//             if(e.type === "bot_command") {
+//                 offs.push(e.offset);
+//             }
+//         });
+    
+//         if(offs.length > 0) {
+//             for(let i = 0; i < offs.length; ++i) {
+//                 let commstr = m.text.slice(offs[i], (i < offs.length-1) ? offs[i+1] : m.text.length);
+//                 let command = commstr.split(/\ +/);
+
+//                 processCommand(command, m, chatRepo, userRepo, taskRepo, updateAccumulator);
+//             }
+//         }
+//     });
+// }
+
+
+api.onText(/(\/.) (.*)/, (msg, match) => {
+    // update backend state
+    // =======================================================
+
+    // ensure user entity
+    await userRepo.createOrUpdateFromMessageJson(msg);
+    
+
+    // ensure chat entity
+    if(msg.chat.type === "private") {
+        const chat = await chatRepo.findPrivateById(msg.chat.id);
+
+        if(chat == null) {
+            chatRepo.createPrivate(msg.chat.id);
         }
+    } else if(msg.chat.type === "group") {
+        const chat = await chatRepo.findGroupById(msg.chat.id);
 
-        user = await userRepo.createOrUpdateFromMessageJson(m);
-    })
-
-    let updateAccumulator = new UpdateAccumulator();
-    
-    let offs;
-    messages.forEach(m => {
-        offs = [];
-
-        m.entities.forEach(e => {
-            if(e.type === "bot_command") {
-                offs.push(e.offset);
-            }
-        });
-    
-        if(offs.length > 0) {
-            for(let i = 0; i < offs.length; ++i) {
-                let commstr = m.text.slice(offs[i], (i < offs.length-1) ? offs[i+1] : m.text.length);
-                let command = commstr.split(/\ +/);
-
-                processCommand(command, m, chatRepo, userRepo, taskRepo, updateAccumulator);
-            }
+        if(chat == null) {
+            chatRepo.createGroup(msg.chat.id);
         }
-    });
-}
+    }
+
+
+    // process command
+    processCommand(match[0], match[1].split(" "), msg);
+
+
+    // update frontend state
+    // =======================================================
+
+
+});
 
 
 
-function processCommand(command, msgJson, chatRepo, userRepo, taskRepo, stateUpdater) {
-    let op = command[0];
-    let params = command.slice(1);
-    
+async function processCommand(op, params, msg) {
     let processed = false;
-    if(!processed) processed = processAdminCommand(op, params, msgJson, chatRepo, userRepo, taskRepo, stateUpdater);
 
-    if(!processed) processed = processUserCommand(op, params, msgJson, chatRepo, userRepo, taskRepo, stateUpdater);
+    if(!processed) processed = await processGeneralCommand(op, params, msg);
 
-    if(!processed) processed = processGameCommand(op, params, msgJson, chatRepo, userRepo, taskRepo, stateUpdater);
+    if(!processed) processed = await processAdminCommand(op, params, msg);
+
+    if(!processed) processed = await processGameCommand(op, params, msg);
+
+    if(!processed) {
+        // unkown command
+    }
 
     return processed;
 }
 
 
-function processAdminCommand(op, params, msgJson, chatRepo, userRepo, taskRepo, updater) {
-    return false;
-}
-
-
-function processUserCommand(op, params, msgJson, chatRepo, userRepo, taskRepo, updater) {
+async function processGeneralCommand(op, params, msg) {
     switch(op) {
-
-        // start
-        // ==============================================================  
-        case "/start": {
-            updater.startedGame(user);
-            break;
-        }
 
         // help
         // ==============================================================          
         case "/help": {
-            updater.requestsHelp(user);
             break;
         }
 
@@ -115,31 +147,35 @@ function processUserCommand(op, params, msgJson, chatRepo, userRepo, taskRepo, u
     return true;
 }
 
+async function processAdminCommand(op, params, msg) {
+    return false;
+}
+
+
 /**
  * 
- * @param {string} op 
- * @param {Array<string>} params 
- * @param {any} msgJson 
- * @param {ChatRepository} chatRepo 
- * @param {UserRepository} userRepo 
- * @param {TaskRepository} taskRepo 
- * @param {UpdateAccumulator} updater 
+ * @param {string} op
+ * @param {Array<string>} params
+ * @param {any} msg
  */
-async function processGameCommand(op, params, msgJson, chatRepo, userRepo, taskRepo, updater) {
-    let user = await userRepo.findById(msgJson.from.id);
+async function processGameCommand(op, params, msg) {
+    let user = await userRepo.findById(msg.from.id);
 
-    /** @type {GroupChatEntity} */
-    let chat = chatRepo.getGroupById(msgJson.chat.id);
-
-    if(!user.hasStarted) return false;
+    let chat = await chatRepo.findGroupById(msg.chat.id);
 
     switch(op) {
+
         // done
         // ==============================================================
         case "/done": {
             // checking param count
             if(params.length < 2 || (params.length % 2) !== 0) {
-                updater.invalidCommandParameters(user, chat, op, "invalid_count");
+                chat.frontendData.invalidParameters.push({
+                    userId: user.id,
+                    op,
+                    params
+                });
+                // updater.invalidCommandParameters(user, chat, op, "invalid_count");
                 break;
             }
 
@@ -152,28 +188,46 @@ async function processGameCommand(op, params, msgJson, chatRepo, userRepo, taskR
                 reps = parseInt(params[i]);
 
                 if(isNaN(reps)) {
-                    updater.invalidCommandParameters(user, chat, op, "reps_is_nan");
+                    chat.frontendData.invalidParameters.push({
+                        userId: user.id,
+                        op,
+                        params
+                    });
                     break;
                 }
 
                 // check and get tasks
-                task = taskRepo.getByName(params[i + 1]);
+                task = await taskRepo.findByName(params[i + 1]);
 
                 if(task == null) {
                     let tId = chat.getTaskIdByAlias(params[i + 1]);
 
                     if(tId != null) {
-                        task = taskRepo.getById(tId);
+                        task = await taskRepo.findById(tId);
                     }
                 }
 
                 if(task == null) {
-                    updater.invalidCommandParameters(user, chat, op, "unknown_task");
+                    chat.frontendData.invalidParameters.push({
+                        userId: user.id,
+                        op,
+                        params
+                    });
                     break;
                 }
 
                 // add task repetitions to user
-                user.addTaskRepetitions(task.id, msgJson.date, reps);
+                user.addTaskRepetitions(task.id, msg.date, reps);
+
+                // notify frontend of all chats the user is in
+                const otherGroups = await chatRepo.findGroupsByIds(user.groupChatIds);
+
+                otherGroups.forEach(group => {
+                    if(group.registeredTasks.hasOwnProperty(task.id)) {
+                        // TODO: unnecessary true. Set maybe? but mongo..
+                        group.frontendData.updatedTasks[task.id] = true;
+                    }
+                });
             }
 
             break;
@@ -185,11 +239,33 @@ async function processGameCommand(op, params, msgJson, chatRepo, userRepo, taskR
         // ==============================================================
         case "/learn": {
             if(params.length !== 1) {
-                updater.invalidCommandParameters(user, chat, op, "invalid_count");
+                chat.frontendData.invalidParameters.push({
+                    userId: user.id,
+                    op,
+                    params
+                });
+
                 break;
             }
 
-            updater.learnTask(user, chat, params[0]);
+            const task = taskRepo.findByName(params[0]);
+
+            if(task == null) {
+                chat.frontendData.invalidParameters.push({
+                    userId: user.id,
+                    op,
+                    params
+                });
+                break;
+            }
+
+            if(!chat.registeredTasks.hasOwnProperty(params[0])) {
+                // TODO: not -1
+                chat.registeredTasks[params[0]] = -1;
+                chat.frontendData.registeredTasks.push(params[0]);
+            } else {
+
+            }
 
             break;
         }
@@ -222,91 +298,31 @@ async function processGameCommand(op, params, msgJson, chatRepo, userRepo, taskR
 }
 
 
-/**
- * 
- * @param {UpdateAccumulator} updateAccumulator 
- * @param {UserRepository} userRepo 
- * @param {ChatRepository} chatRepo 
- */
-async function updateChats(updateAccumulator, userRepo, chatRepo) {
-    for(const userInfo of updateAccumulator.users) {
-        const uId = userInfo[0];
-        const info = userInfo[1];
+// async function renderFrontends(chatIds) {
+//     const groups = await chatRepo.findGroupsByIds(chatIds);
 
-        const user = await userRepo.findById(uId);
+//     groups.forEach(group => {
+//         renderGroupFrontend(group);
+//     });
+// }
 
-        // get all groups that the user is in
-        const groups = await chatRepo.findGroupsByIds(user.groupChatIds);
+// async function renderGroupFrontend(group) {
+//     /** @type {FrontendData} */
+//     const data = group.frontendData;
 
-        // foreach updated task:
-        for(const taskId of info.updatedTasks) {
+//     if(data.registeredTasks.length > 0) {
+//         let str = "";
+//         data.registeredTasks.forEach(tName => {
+//             str += "Ich kenne jetzt " + tName + "\n";
+//         })
+//         api.sendMessage(
+//             group.id, 
+//             str,
+//             {parse_mode: "MarkdownV2"});
+//     }
 
-            // update all groups
-            groups.forEach(g => {
-                const accReps = user.accumulateTaskRepetitions(taskId, g.botAddedTimestamp);
-                const hasNewRecord = g.update(taskId, user.id, accReps);
-
-                // TODO: send message to group
-                if(hasNewRecord) {
-
-                }
-
-                // send message
-            })
-        }     
-    }
-}
-
-function sendMessage(chatId, text, messageId) {
-    var data = {
-        chat_id: chatId,
-        text: text
-    };
-    data.parse_mode = "Markdown";
-    if(messageId != null) data.reply_to_message_id = messageId;
-
-    var stringData = JSON.stringify(data);
-
-    const req = https.request(
-        POST("sendMessage", stringData), res => {
-            res.on('data', d => {
-                // console.log("MEEEESSAGE SENT");
-                // console.log(JSON.parse(d));
-                // getting sent message object
-            });
-        }
-    );
-
-    req.on('error', error => {
-        console.error(error);
-    });
-
-    console.log("Sending message:");
-    console.log(stringData);
-
-    req.write(stringData);
-
-    req.end();
-}
-
-function addRemaining(chat, userId, exercise, count) {
-    if(!chat.users.hasOwnProperty(userId))
-        chat.users[userId] = new UserData();
-    if(!chat.users[userId].remainders.hasOwnProperty(exercise))
-        chat.users[userId].remainders[exercise] = 0;
-
-    chat.users[userId].remainders[exercise] += count;
-    if(chat.users[userId].remainders[exercise] < 0) 
-        chat.users[userId].remainders[exercise] = 0;
-}
-
-function getRemaining(chat, userId, exercise) {
-    if(!chat.users.hasOwnProperty(userId)) return 0;
-    if(!chat.users[userId].remainders.hasOwnProperty(exercise)) return 0;
-    return chat.users[userId].remainders[exercise];
-}
-
-
+//     if(data.)
+// }
 
 
 

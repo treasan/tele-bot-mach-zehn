@@ -7,7 +7,7 @@ class UserRepository {
 
     /**
      * 
-     * @param {number} id 
+     * @param {number | string} id 
      * @return {Promise<UserEntity>}
      */
     async findById(id) {
@@ -20,6 +20,16 @@ class UserRepository {
         }
 
         return this.cachedUserEntities[id];
+    }
+
+    /**
+     * 
+     * @param {Array<number | string>} ids
+     * @return {Promise<Array<UserEntity>>}
+     */
+    async findByIds(ids) {
+        // TODO
+        return null;
     }
 
     async createOrUpdateFromMessageJson(messageJson) {
@@ -129,5 +139,32 @@ class TaskRepository {
         this.db = database;
         this.taskCollection = null;
         this.cachedTaskEntities = {};
+    }
+
+    /**
+     * 
+     * @param {number | string} id 
+     * @return {Promise<TaskEntity>}
+     */
+    async findById(id) {
+        if(this.taskCollection === null) {
+            this.taskCollection = await this.db.collection("tasks");
+        }
+
+        return await this.taskCollection.findOne({id});
+    }
+
+
+        /**
+     * 
+     * @param {string} name 
+     * @return {Promise<TaskEntity>}
+     */
+    async findByName(name) {
+        if(this.taskCollection === null) {
+            this.taskCollection = await this.db.collection("tasks");
+        }
+
+        return await this.taskCollection.findOne({name});
     }
 }

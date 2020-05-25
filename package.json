@@ -2,7 +2,7 @@
   "name": "tele-bot-mach-zehn",
   "version": "1.0.0",
   "description": "Pumpen in quarantäne",
-  "main": "index.js",
+  "main": "main.js",
   "scripts": {
     "test": "node index.js",
     "release": "node index.js"

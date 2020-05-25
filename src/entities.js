@@ -1,3 +1,23 @@
+class FrontendData {
+    constructor() {
+        this.needsUpdate = false;
+        this.lastUpdate = -1;
+
+        this.updatedTasks = {};
+        this.registeredTasks = new Set(); // TODO: aufpassen obs geht!
+
+        /** @type {{[taskId: number]: Array<string>}} */
+        this.newTaskLabels = {};
+
+        this.helpRequested = false;
+        
+        this.unknownCommands = {};
+        this.invalidParameters = {};
+
+        this.deletableMessages = [];
+    }
+}
+
 class TaskEntity {
     constructor(id, name) {
         // custom id
@@ -143,38 +163,34 @@ class GroupChatEntity {
         this.playerIds = [];
 
         /**
-         * stores all tasks that were done at least once in this group
-         * 
-         * currentRecord: currently highest repetition in this group
-         * 
-         * userId: id of user that did it
-         * 
-         * @type {{[taskId: number]: {currentRecord: number, userId: number}}}
+         * Stores all of the group's task ids
+         * @type {{[taskId: number]: number}}
          */
-        this.taskInformation = {};
+        this.registeredTasks = {};
+
+        /**
+         * 
+         * @type {{[alias: string]: number}}
+         */        
+        this.taskAliases = {};
 
         // unix timestamp to know when the group started to use the bot
         this.botAddedTimestamp = -1
+
+        /**
+         * Stores frontend information that may be necessary to update this chat
+         * 
+         * @type {FrontendData | null}
+         */
+        this.frontendData = null;
     }
 
-    update(taskId, userId, totalRepetitions) {
-        if(!this.taskInformation.hasOwnProperty(taskId)) {
-            this.taskInformation[taskId] = {
-                currentRecord: totalRepetitions,
-                userId
-            }
-
-            return true;
-        } else {
-            let taskInfo = this.taskInformation[taskId];
-            if(taskInfo.currentRecord < totalRepetitions) {
-                taskInfo.currentRecord = totalRepetitions;
-                taskInfo.userId = userId;
-                return true;
-            }
+    getTaskIdByAlias(alias) {
+        if(this.taskAliases.hasOwnProperty(alias)) {
+            return this.taskAliases[alias];
         }
 
-        return false;
+        return null;
     }
 
     static isGroupChatId(chatId) {
